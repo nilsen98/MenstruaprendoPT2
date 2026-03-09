@@ -13,6 +13,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+
+pp.use((req, _res, next) => {
+  console.log('REQ =>', req.method, req.originalUrl);
+  next();
+});
+
+
 app.get('/', (_req, res) => res.send('Backend MenstruAprendo'));
 
 // monta cada feature
