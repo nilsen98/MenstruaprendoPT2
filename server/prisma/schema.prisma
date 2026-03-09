@@ -1,0 +1,126 @@
+// ============ GENERATOR & DATASOURCE ============
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]
+}
+
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL") // mysql://user:password@host:3306/mydb
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+// ================== ENUMS ==================
+enum Flujo {
+  LIGERO
+  MODERADO
+  ABUNDANTE
+}
+
+enum Animo {
+  FELIZ
+  TRISTE
+  ENOJADA
+}
+
+// ================== MODELS ==================
+
+// ---------- TUTORES ----------
+model Tutor {
+  id       Int       @id @default(autoincrement())
+  nombre   String    @db.VarChar(100)
+  correo   String    @unique @db.VarChar(100)
+
+  usuarias Usuaria[]
+  reportes Reporte[]
+}
+
+// ---------- USUARIAS ----------
+model Usuaria {
+  id               Int       @id @default(autoincrement())
+  email           String    @unique @db.VarChar(100)
+  passwordHash     String    @db.VarChar(255)
+  nombre           String    @db.VarChar(80)
+  apellido         String    @db.VarChar(80)   // un solo apellido
+  fechaNacimiento  DateTime
+  tutorId          Int?                          // vínculo opcional al tutor
+  tutor            Tutor?    @relation(fields: [tutorId], references: [id], onDelete: SetNull)
+
+  resetToken       String?   @db.VarChar(255)
+  resetTokenExp    DateTime?
+
+  periodos         Periodo[]
+  scores           PuntuacionModulo[]
+  reportes         Reporte[]
+
+  @@index([tutorId])
+}
+
+// ---------- PERIODOS ----------
+model Periodo {
+  id           Int          @id @default(autoincrement())
+  usuariaId    Int
+  fechaInicio  DateTime
+  fechaFin     DateTime?       // ⬅️ ahora obligatoria (todo periodo tiene inicio y fin)
+
+  usuaria      Usuaria        @relation(fields: [usuariaId], references: [id], onDelete: Cascade)
+  dias         PeriodoDia[]   // relación 1:N con los días del periodo
+
+  @@index([usuariaId, fechaInicio])
+  @@index([usuariaId, fechaFin])
+}
+
+// ---------- PERIODO_DIA ----------
+model PeriodoDia {
+  id         Int      @id @default(autoincrement())
+  periodoId  Int
+  fecha      DateTime
+  flujo      Flujo
+  animo      Animo
+
+  periodo    Periodo  @relation(fields: [periodoId], references: [id], onDelete: Cascade)
+
+  @@unique([periodoId, fecha])  // solo un registro por día dentro del mismo periodo
+  @@index([fecha])
+}
+
+// ---------- MODULOS ----------
+model Modulo {
+  id          Int                 @id @default(autoincrement())
+  nombre      String              @unique @db.VarChar(80)
+  descripcion String?             @db.Text
+  contenido   Json?               // si prefieres, usa: String? @db.Text
+
+  scores      PuntuacionModulo[]
+}
+
+// ---------- PUNTUACION_MODULOS ----------
+model PuntuacionModulo {
+  usuariaId  Int
+  moduloId   Int
+  puntuacion Int        @default(0)
+
+  usuaria    Usuaria    @relation(fields: [usuariaId], references: [id], onDelete: Cascade)
+  modulo     Modulo     @relation(fields: [moduloId], references: [id], onDelete: Cascade)
+
+  @@id([usuariaId, moduloId])   // clave primaria compuesta
+  @@index([moduloId])
+}
+
+// ---------- REPORTES ----------
+model Reporte {
+  id         Int      @id @default(autoincrement())
+  usuariaId  Int
+  tutorId    Int
+  anio       Int
+  mes        Int       // 1..12
+  contenido  String?   @db.Text
+  enviadoAt  DateTime?
+
+  usuaria    Usuaria   @relation(fields: [usuariaId], references: [id], onDelete: Cascade)
+  tutor      Tutor     @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+
+  @@unique([usuariaId, tutorId, anio, mes])
+  @@index([anio, mes])
+}

@@ -1,0 +1,39 @@
+services:
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    working_dir: /server
+    volumes:
+      - ./server:/server
+    env_file:
+      - ./server/.env
+    environment:
+      DATABASE_URL: "mysql://user:password@mysql_db:3306/mydb"
+      # SHADOW_DATABASE_URL: "mysql://root:rootpassword@mysql_db:3306/mydb_shadow" # opcional
+    ports:
+      - "3000:3000"
+      - "5555:5555"   
+    depends_on:
+      - mysql_db
+
+  mysql_db:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: mydb
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    ports:
+      - "3306:3306"
+    volumes:
+      - pt2_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uuser", "-ppassword"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+volumes:
+  pt2_mysql_data:
