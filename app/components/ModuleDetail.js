@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 import Pdf from 'react-native-pdf';
@@ -14,14 +14,14 @@ const COLORS = {
 };
 
 export const MODULES = {
-  1: { title: 'Preadolescencia', level: 'Nivel principiante', pdf: require('../assets/pdfs/mod1.pdf') },
-  2: { title: 'Cambios en la menstruación', level: 'Nivel cambios', pdf: require('../assets/pdfs/mod2.pdf') },
-  3: { title: 'Ciclo menstrual', level: 'Nivel conoces tu ciclo', pdf: require('../assets/pdfs/mod3.pdf') },
-  4: { title: 'Síntomas en la menstruación', level: 'Nivel te preocupas por tu ciclo', pdf: require('../assets/pdfs/mod4.pdf') },
-  5: { title: 'Alimentación y ejercicio', level: 'Nivel vas más allá', pdf: require('../assets/pdfs/mod5.pdf') },
-  6: { title: 'Qué hacer durante la menstruación', level: 'Nivel es hora de actuar', pdf: require('../assets/pdfs/mod6.pdf') },
-  7: { title: 'Seguimiento del periodo', level: 'Nivel consciencia', pdf: require('../assets/pdfs/mod7.pdf') },
-  8: { title: 'Mitos y realidades', level: 'Nivel ya nada te para', pdf: require('../assets/pdfs/mod8.pdf') },
+  1: { title: 'Preadolescencia', level: 'Nivel principiante', pdf: 'https://menstruaprendopt2.onrender.com/pdfs/mod1.pdf' },
+  2: { title: 'Cambios en la menstruación', level: 'Nivel cambios', pdf: 'https://menstruaprendopt2.onrender.com/pdfs/mod2.pdf' },
+  3: { title: 'Ciclo menstrual', level: 'Nivel conoces tu ciclo', pdf: 'https://menstruaprendopt2.onrender.com/pdfs/mod3.pdf' },
+  4: { title: 'Síntomas en la menstruación', level: 'Nivel te preocupas por tu ciclo', pdf: 'https://menstruaprendopt2.onrender.com/pdfs/mod4.pdf' },
+  5: { title: 'Alimentación y ejercicio', level: 'Nivel vas más allá', pdf: 'https://menstruaprendopt2.onrender.com/pdfs/mod5.pdf' },
+  6: { title: 'Qué hacer durante la menstruación', level: 'Nivel es hora de actuar', pdf: 'https://menstruaprendopt2.onrender.com/pdfs/mod6.pdf' },
+  7: { title: 'Seguimiento del periodo', level: 'Nivel consciencia', pdf: 'https://menstruaprendopt2.onrender.com/pdfs/mod7.pdf' },
+  8: { title: 'Mitos y realidades', level: 'Nivel ya nada te para', pdf: 'https://menstruaprendopt2.onrender.com/pdfs/mod8.pdf' },
 };
 
 export default function ModuleDetail({ route, navigation }) {
@@ -32,15 +32,6 @@ export default function ModuleDetail({ route, navigation }) {
     () => MODULES[moduleId] ?? { title: 'Módulo', level: '', pdf: null },
     [moduleId]
   );
-
-  const pdfSource = useMemo(() => {
-    if (!meta.pdf) return null;
-
-    const resolved = Image.resolveAssetSource(meta.pdf);
-    if (!resolved?.uri) return null;
-
-    return { uri: resolved.uri, cache: true };
-  }, [meta.pdf]);
 
   return (
     <View style={styles.root}>
@@ -59,9 +50,9 @@ export default function ModuleDetail({ route, navigation }) {
 
       <View style={styles.container}>
         <View style={styles.card}>
-          {pdfSource ? (
-            <Pdf
-              source={pdfSource}
+          {meta.pdf ? (
+             <Pdf
+              source={{ uri: meta.pdf, cache: true }}
               style={styles.pdf}
               onLoadComplete={(pages) => console.log(`PDF cargado: ${pages} páginas`)}
               onError={(error) => console.warn('Error PDF:', error)}

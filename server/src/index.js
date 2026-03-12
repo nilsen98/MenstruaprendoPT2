@@ -8,6 +8,8 @@ import reporteRouter from './reporte.js';
 import usuariaRouter from './usuaria.js';
 import prediccionRouter from './prediccion.js';
 import 'dotenv/config';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 app.use(cors());
@@ -95,6 +97,9 @@ app.get('/reset-password', (req, res) => {
     </html>
   `);
 });
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
+app.use('/pdfs', express.static(path.join(__dirname, '../public/pdfs')));
 
 app.listen(PORT, '0.0.0.0', () => console.log(`Servidor en puerto ${PORT}`));
