@@ -1,6 +1,5 @@
-// screens/ModuleDetail.js
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions,ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 import Pdf from 'react-native-pdf';
@@ -14,9 +13,6 @@ const COLORS = {
   border: '#F2B8C6',
 };
 
-// =========================
-// 📦 EXPORTACIÓN DE LOS PDFs
-// =========================
 export const MODULES = {
   1: { title: 'Preadolescencia', level: 'Nivel principiante', pdf: require('../assets/pdfs/mod1.pdf') },
   2: { title: 'Cambios en la menstruación', level: 'Nivel cambios', pdf: require('../assets/pdfs/mod2.pdf') },
@@ -28,40 +24,61 @@ export const MODULES = {
   8: { title: 'Mitos y realidades', level: 'Nivel ya nada te para', pdf: require('../assets/pdfs/mod8.pdf') },
 };
 
-const { width } = Dimensions.get('window');
-
 export default function ModuleDetail({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const moduleId = route?.params?.moduleId ?? 1;
+
   const meta = useMemo(
     () => MODULES[moduleId] ?? { title: 'Módulo', level: '', pdf: null },
     [moduleId]
   );
 
+  const pdfSource = useMemo(() => {
+    if (!meta.pdf) return null;
+
+    const resolved = Image.resolveAssetSource(meta.pdf);
+    if (!resolved?.uri) return null;
+
+    return { uri: resolved.uri, cache: true };
+  }, [meta.pdf]);
+
   return (
     <View style={styles.root}>
-      {/* Top bar */}
-      <View style={[styles.topBar, { paddingTop: Math.max(insets.top, hp('7%')), paddingBottom: hp('3%')  }]}>
+      <View
+        style={[
+          styles.topBar,
+          {
+            paddingTop: Math.max(insets.top, hp('7%')),
+            paddingBottom: hp('3%'),
+          },
+        ]}
+      >
         <Text style={styles.topTitle}>{meta.title}</Text>
         {meta.level ? <Text style={styles.topSubtitle}>{meta.level}</Text> : null}
       </View>
 
-        <View style={styles.container}>
+      <View style={styles.container}>
         <View style={styles.card}>
-          <Pdf
-            source={meta.pdf}
-            style={styles.pdf}
-            onLoadComplete={(pages) => console.log(`PDF cargado: ${pages} páginas`)}
-            onError={(error) => console.warn('Error PDF:', error)}
-            enablePaging={false}
-            trustAllCerts={false}
-            spacing={4}
-            renderActivityIndicator={(progress) => (
-              <Text style={styles.loadingText}>Cargando… {Math.round((progress || 0) * 100)}%</Text>
-            )}
-          />
+          {pdfSource ? (
+            <Pdf
+              source={pdfSource}
+              style={styles.pdf}
+              onLoadComplete={(pages) => console.log(`PDF cargado: ${pages} páginas`)}
+              onError={(error) => console.warn('Error PDF:', error)}
+              enablePaging={false}
+              trustAllCerts={false}
+              spacing={4}
+              renderActivityIndicator={(progress) => (
+                <Text style={styles.loadingText}>
+                  Cargando… {Math.round((progress || 0) * 100)}%
+                </Text>
+              )}
+            />
+          ) : (
+            <Text style={styles.loadingText}>No se pudo cargar el PDF.</Text>
+          )}
         </View>
-        
+
         <TouchableOpacity
           style={styles.quizBtn}
           activeOpacity={0.9}
@@ -70,9 +87,9 @@ export default function ModuleDetail({ route, navigation }) {
           <Text style={styles.quizBtnText}>Realizar quiz del módulo</Text>
         </TouchableOpacity>
       </View>
-    
+
       <FooterGeneral navigation={navigation} activeScreen="Módulos" />
-       </View>
+    </View>
   );
 }
 
@@ -92,7 +109,12 @@ const styles = StyleSheet.create({
     marginTop: hp('0.2%'),
     fontSize: Math.max(wp('3.6%'), 13),
   },
-  container: { flex: 1, paddingHorizontal: wp('4%'), paddingTop: hp('1%'),paddingBottom: hp('10%'), },
+  container: {
+    flex: 1,
+    paddingHorizontal: wp('4%'),
+    paddingTop: hp('1%'),
+    paddingBottom: hp('10%'),
+  },
   card: {
     flex: 1,
     backgroundColor: COLORS.white,
@@ -125,7 +147,4 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: Math.max(wp('4.4%'), 15),
   },
-  scrollContent: {
-  paddingBottom: hp('14%'),
-},
 });

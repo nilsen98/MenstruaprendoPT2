@@ -1,8 +1,10 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const BASE = (process.env.EXPO_PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+
 const api = axios.create({
-  baseURL: `${process.env.EXPO_PUBLIC_BASE_URL}/api`,
+  baseURL: `${BASE}/api`,
   timeout: 10000,
 });
 

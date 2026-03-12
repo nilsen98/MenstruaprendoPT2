@@ -136,7 +136,10 @@ function Inicio({ navigation }) {
     });
 
   } catch (err) {
-    Alert.alert('Error', 'Correo o contraseña incorrectos');
+    Alert.alert(
+  'Error',
+  err?.response?.data?.error || err?.message || 'Error desconocido'
+);
   } finally {
     setLoading(false);
   }

@@ -1,13 +1,10 @@
-// screens/Modules.js
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
-import FooterGeneral from './FooterGeneral';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-
-const API_URL = 'http://10.0.2.2:3000/api';
+import FooterGeneral from './FooterGeneral';
+import api from '../services/api';
 
 const COLORS = {
   bg: '#FDE1DE',
@@ -70,14 +67,6 @@ const modulesData = [
   },
 ];
 
-async function getAuthHeaders() {
-  const token = await AsyncStorage.getItem('token'); // cambia si tu key es otra
-  return {
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  };
-}
-
 export default function Modules({ navigation, route }) {
   const insets = useSafeAreaInsets();
 
@@ -90,18 +79,21 @@ export default function Modules({ navigation, route }) {
     (async () => {
       try {
         setLoading(true);
-        const headers = await getAuthHeaders();
-        const res = await fetch(`${API_URL}/modulos/progreso`, { headers });
-        const data = await res.json();
 
-        if (!res.ok) throw new Error(data?.error || 'Error progreso');
+        const { data } = await api.get('/modulos/progreso');
 
-        if (mounted) setModuloActual(data.moduloActual ?? 1);
+        if (mounted) {
+          setModuloActual(data?.moduloActual ?? 1);
+        }
       } catch (e) {
-        console.warn(e);
-        if (mounted) setModuloActual(1);
+        console.warn('Error al cargar progreso:', e?.response?.data || e?.message || e);
+        if (mounted) {
+          setModuloActual(1);
+        }
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     })();
 
@@ -110,11 +102,8 @@ export default function Modules({ navigation, route }) {
     };
   }, []);
 
-
-  // ✅ Se ejecuta cada vez que la pantalla entra en foco (volver desde ModuleDetail/Quiz/etc.)
   useFocusEffect(loadProgreso);
 
-  // ✅ También refresca si vienes del footer con params refresh (FooterGeneral con merge:true)
   useEffect(() => {
     if (route?.params?.refresh) {
       loadProgreso();
@@ -123,7 +112,9 @@ export default function Modules({ navigation, route }) {
 
   const renderItem = ({ item, index }) => {
     const desc = item.temas?.[0] ?? item.nivel;
-    const bloqueado = !loading && item.id > moduloActual;
+
+    // Mientras carga, solo deja abierto el módulo 1
+    const bloqueado = loading ? item.id > 1 : item.id > moduloActual;
 
     return (
       <View style={[styles.card, bloqueado && { opacity: 0.6 }]}>
@@ -142,13 +133,19 @@ export default function Modules({ navigation, route }) {
           activeOpacity={0.9}
           onPress={() => {
             if (bloqueado) {
-              Alert.alert('Módulo bloqueado', `Primero termina el módulo ${moduloActual} para desbloquear este.`);
+              Alert.alert(
+                'Módulo bloqueado',
+                `Primero termina el módulo ${loading ? 1 : moduloActual} para desbloquear este.`
+              );
               return;
             }
+
             navigation?.navigate('ModuleDetail', { moduleId: item.id });
           }}
         >
-          <Text style={styles.ctaButtonText}>{bloqueado ? 'Bloqueado 🔒' : 'Leer más...'}</Text>
+          <Text style={styles.ctaButtonText}>
+            {bloqueado ? 'Bloqueado 🔒' : 'Leer más...'}
+          </Text>
         </TouchableOpacity>
       </View>
     );
