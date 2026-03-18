@@ -127,10 +127,10 @@ router.post('/forgot-password', async (req, res) => {
       });
     }
 
-    // Generar token 6 caracteres (dev-friendly)
-    const token = crypto.randomBytes(3).toString('hex').toUpperCase(); // ej: "A1B2C3"
+    // Generar token 
+    const token = crypto.randomBytes(3).toString('hex').toUpperCase(); 
     const tokenHash = await bcrypt.hash(token, 8);
-    const exp = new Date(Date.now() + 15 * 60 * 1000); // 15 min
+    const exp = new Date(Date.now() + 15 * 60 * 1000); 
 
     await prisma.usuaria.update({
       where: { id: usuaria.id },
@@ -141,7 +141,7 @@ router.post('/forgot-password', async (req, res) => {
     });
 
     // DEV: devolvemos token para pruebas
-   // Construir link para restablecer (se abre en navegador)
+   // Construir link para restablecer 
 const base = process.env.APP_PUBLIC_URL || 'http://localhost:3000';
 const link = `${base}/reset-password?email=${encodeURIComponent(email.toLowerCase())}&token=${encodeURIComponent(token)}`;
 
@@ -160,7 +160,7 @@ await transporter.sendMail({
   `,
 });
 
-// Respuesta genérica (seguridad)
+// Respuesta genérica
 return res.json({
   ok: true,
   message: 'Si existe la cuenta, recibirás un correo.'

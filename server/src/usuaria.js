@@ -45,9 +45,8 @@ router.patch('/me', auth, async (req, res) => {
       if (isNaN(fn)) return res.status(400).json({ error: 'fechaNacimiento inválida' });
       dataUsuaria.fechaNacimiento = fn;
     }
-
-    // 2) manejo de tutor (crear/editar/desvincular)
-    // tutor puede ser: undefined (no tocar), null (desvincular), o {nombre, correo}
+ // 2) manejo de tutor (crear/editar/desvincular)
+    // tutor puede ser: undefined (no tocar), null (desvincular), o { nombre, correo }
     if (tutor !== undefined) {
       // a) desvincular tutor
       if (tutor === null || tutor?.correo === '' || tutor?.correo === null) {
@@ -56,63 +55,84 @@ router.patch('/me', auth, async (req, res) => {
         const tutorNombre = (tutor?.nombre || '').trim();
         const tutorCorreo = (tutor?.correo || '').trim().toLowerCase();
 
-// ✅ Regla: el correo del tutor NO puede ser el mismo que el de la usuaria
-const usuariaActual = await prisma.usuaria.findUnique({
-  where: { id: req.user.id },
-  select: { email: true, tutorId: true },
-});
+        // Regla: el correo del tutor NO puede ser el mismo que el de la usuaria
+        const usuariaActual = await prisma.usuaria.findUnique({
+          where: { id: req.user.id },
+          select: { email: true, tutorId: true },
+        });
 
-if (!usuariaActual) {
-  return res.status(404).json({ error: 'Usuaria no encontrada' });
-}
-
-if (usuariaActual.email.toLowerCase() === tutorCorreo) {
-  return res.status(400).json({ error: 'El correo del tutor no puede ser el mismo que el de la usuaria' });
-}
-
-
-        if (!tutorNombre || !tutorCorreo) {
-          return res.status(400).json({ error: 'tutor.nombre y tutor.correo son requeridos' });
+        if (!usuariaActual) {
+          return res.status(404).json({ error: 'Usuaria no encontrada' });
         }
 
-        // obtiene la usuaria actual para saber si ya tiene tutorId
+        if (usuariaActual.email.toLowerCase() === tutorCorreo) {
+          return res.status(400).json({
+            error: 'El correo del tutor no puede ser el mismo que el de la usuaria',
+          });
+        }
+
+        if (!tutorNombre || !tutorCorreo) {
+          return res.status(400).json({
+            error: 'tutor.nombre y tutor.correo son requeridos',
+          });
+        }
+
         const actual = usuariaActual;
 
-
-        // si ya tiene tutor, lo actualizamos (permitir editar cuantas veces quiera)
         if (actual?.tutorId) {
-          // si intenta cambiar el correo a uno ya usado por otro tutor -> conflicto
+          const linkedUsersCount = await prisma.usuaria.count({
+            where: { tutorId: actual.tutorId },
+          });
+
           const existing = await prisma.tutor.findUnique({
             where: { correo: tutorCorreo },
-            select: { id: true },
+            select: { id: true, nombre: true, correo: true },
           });
 
-          if (existing && existing.id !== actual.tutorId) {
-            return res.status(409).json({ error: 'Ese correo ya está registrado para otro tutor' });
+          if (linkedUsersCount > 1) {
+            // Tutor compartido: NO actualizar el tutor actual.
+            // Solo separar a esta usuaria.
+
+            if (existing && existing.id === actual.tutorId) {
+              // Sigue siendo el mismo tutor
+              dataUsuaria.tutorId = actual.tutorId;
+            } else if (existing) {
+              // Ya existe otro tutor con ese correo
+              dataUsuaria.tutorId = existing.id;
+            } else {
+              // Crear un tutor nuevo solo para esta usuaria
+              const nuevoTutor = await prisma.tutor.create({
+                data: { nombre: tutorNombre, correo: tutorCorreo },
+                select: { id: true },
+              });
+
+              dataUsuaria.tutorId = nuevoTutor.id;
+            }
+          } else {
+            // Tutor no compartido: sí se puede editar directamente
+            if (existing && existing.id !== actual.tutorId) {
+              // Ya existe otro tutor con ese correo: vincular a ese
+              dataUsuaria.tutorId = existing.id;
+            } else {
+              // Editar el mismo tutor
+              await prisma.tutor.update({
+                where: { id: actual.tutorId },
+                data: { nombre: tutorNombre, correo: tutorCorreo },
+              });
+
+              dataUsuaria.tutorId = actual.tutorId;
+            }
           }
-
-          await prisma.tutor.update({
-            where: { id: actual.tutorId },
-            data: { nombre: tutorNombre, correo: tutorCorreo },
-          });
-
-          dataUsuaria.tutorId = actual.tutorId;
         } else {
-          // si no tiene tutor: crear y vincular
-          // si el correo ya existe, puedes:
-          // - vincular al existente (si quieres permitirlo)
-          // - o devolver error
-          // Yo recomiendo vincular SOLO si quieres permitir tutores compartidos.
+          // Si no tiene tutor: reutilizar si existe o crear uno nuevo
           const existing = await prisma.tutor.findUnique({
             where: { correo: tutorCorreo },
             select: { id: true },
           });
 
           if (existing) {
-            // opción A: vincular al tutor existente
             dataUsuaria.tutorId = existing.id;
           } else {
-            // crear tutor nuevo
             const nuevoTutor = await prisma.tutor.create({
               data: { nombre: tutorNombre, correo: tutorCorreo },
               select: { id: true },
@@ -123,7 +143,7 @@ if (usuariaActual.email.toLowerCase() === tutorCorreo) {
       }
     }
 
-    // 3) aplicar update a usuaria (si no hay cambios, devuelve perfil actual)
+    // 3) aplicar update a usuaria
     const updated = await prisma.usuaria.update({
       where: { id: req.user.id },
       data: dataUsuaria,
@@ -152,11 +172,15 @@ router.patch('/change-password', auth, async (req, res) => {
     const { currentPassword, newPassword } = req.body || {};
 
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'currentPassword y newPassword son requeridos' });
+      return res.status(400).json({
+        error: 'currentPassword y newPassword son requeridos',
+      });
     }
 
     if (String(newPassword).length !== 8) {
-      return res.status(400).json({ error: 'La nueva contraseña debe tener 8 caracteres' });
+      return res.status(400).json({
+        error: 'La nueva contraseña debe tener 8 caracteres',
+      });
     }
 
     // 1) Traer hash actual
@@ -182,12 +206,10 @@ router.patch('/change-password', auth, async (req, res) => {
     });
 
     return res.json({ ok: true, message: 'Contraseña actualizada correctamente' });
-
   } catch (e) {
     console.error('Change password error:', e);
     return res.status(500).json({ error: 'No se pudo actualizar la contraseña' });
   }
 });
-
 
 export default router;

@@ -136,6 +136,8 @@ useEffect(() => {
     { emoji: '🌸',   text: 'Recuerda que la menstruación es una parte normal en la vida de las mujeres.' },
     { emoji: '😊',   text: '¿Sabías que... normalmente la primera menstruación llega de los 9 hasta los 15 años?' },
     { emoji: '🍫',   text: '¿Sabías que... cuando llegues al Nivel ya nada te para habrás completado todos los módulos de la aplicación?' },
+    {emoji: '🗓️', text:'¿Sabías que...en la pantalla Calendario puedes registrar tu periodo? '},
+    {emoji:'🗒️', text:'¿Sabías que...en la pantalla Editar perfil puedes agregar a un tutor para poderle mandar un registro menstrual?'},
   ];
 
 const [infoIndex, setInfoIndex] = useState(0);

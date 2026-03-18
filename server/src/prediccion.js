@@ -1,4 +1,3 @@
-// server/src/prediccion.js
 import { Router } from 'express';
 import { prisma } from './db.js';
 import { auth } from './auth.js';
@@ -12,7 +11,7 @@ function daysBetweenUTC(a, b) {
   return Math.round((db - da) / MS_DAY);
 }
 
-// ====== NUEVO: helpers para "teórica" vs "ajustada a futuro" ======
+// "teórica" vs "ajustada a futuro" ======
 function startOfUTCDay(d) {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
@@ -22,7 +21,7 @@ function addDaysUTC(d, days) {
 }
 
 /**
- * Recibe una fecha base (teórica) y, si ya quedó en el pasado, la empuja
+ * Recibe fecha teórica y, si ya quedó en el pasado, la empuja
  * por ciclos hasta que quede >= hoy (UTC day).
  */
 function adjustToFuture(baseDate, cycleDays, now = new Date()) {
@@ -40,7 +39,7 @@ function adjustToFuture(baseDate, cycleDays, now = new Date()) {
 }
 
 function linearRegression(xs, ys) {
-  // OLS: y = a + b x
+  //  y = a + b x
   const n = xs.length;
   if (n === 0) return null;
   if (n === 1) return { a: ys[0], b: 0 };
@@ -70,7 +69,7 @@ function median(arr) {
 
 export function predecirProximoInicio(startDates) {
   const BASELINE_DAYS = 28;
-  const TOL = 8; // tolerancia ±8 días alrededor de la mediana
+  const TOL = 8; // tolerancia ±8 días 
 
   if (!startDates || startDates.length === 0) {
     return { ok: false, reason: 'Sin registros de periodo' };
@@ -85,10 +84,10 @@ export function predecirProximoInicio(startDates) {
     const lastStart = starts[0];
     const cycleDays = BASELINE_DAYS;
 
-    // ✅ fecha teórica (lo que tú esperas): lastStart + 28
+    // ✅ fecha teórica  lastStart + 28
     const baseNextStart = addDaysUTC(lastStart, cycleDays);
 
-    // ✅ fecha ajustada al futuro (para "faltan X días")
+    // ✅ fecha ajustada al futuro 
     const { today, future } = adjustToFuture(baseNextStart, cycleDays);
 
     return {
@@ -97,10 +96,10 @@ export function predecirProximoInicio(startDates) {
       cyclesUsed: 0,
       predictedCycleLengthDays: cycleDays,
 
-      // Teórica (puede caer en el pasado si el registro es viejo)
+      // Teórica 
       nextPeriodStart: baseNextStart.toISOString(),
 
-      // Ajustada al futuro (si nextPeriodStart ya pasó)
+      // Ajustada al futuro 
       adjustedNextPeriodStart: future.toISOString(),
       daysRemaining: daysBetweenUTC(today, future),
 

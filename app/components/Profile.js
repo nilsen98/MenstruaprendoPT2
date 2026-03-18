@@ -1,5 +1,5 @@
 // components/Profile.js
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,11 +8,13 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
-  ScrollView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 import FooterGeneral from './FooterGeneral';
 import api from '../services/api';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
@@ -28,10 +30,12 @@ const COLORS = {
 
 const validateEmail = (v = '') => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
+const getPhotoStorageKey = (email) =>
+  `profile_photo_${email?.toLowerCase?.() || 'default'}`;
+
 export default function Profile({ navigation }) {
   const insets = useSafeAreaInsets();
 
-  // ======== Estado real del perfil (desde backend) ========
   const [perfil, setPerfil] = useState({
     nombre: '',
     apellido: '',
@@ -41,12 +45,10 @@ export default function Profile({ navigation }) {
     tutorCorreo: '',
   });
 
-  // Tutor editable
   const [tutorNombre, setTutorNombre] = useState('');
   const [tutorCorreo, setTutorCorreo] = useState('');
   const [editTutor, setEditTutor] = useState(false);
 
-  // Password
   const [changePassword, setChangePassword] = useState(false);
   const [actualPasswordInput, setActualPasswordInput] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -58,7 +60,33 @@ export default function Profile({ navigation }) {
   const [showNew, setShowNew] = useState(false);
   const [showRepeat, setShowRepeat] = useState(false);
 
-  // ======== Cargar perfil al entrar ========
+  const loadSavedPhoto = async (email) => {
+    try {
+      if (!email) {
+        setPhotoUri(null);
+        return;
+      }
+
+      const savedUri = await AsyncStorage.getItem(getPhotoStorageKey(email));
+
+      if (!savedUri) {
+        setPhotoUri(null);
+        return;
+      }
+
+      const fileInfo = await FileSystem.getInfoAsync(savedUri);
+      if (fileInfo.exists) {
+        setPhotoUri(savedUri);
+      } else {
+        await AsyncStorage.removeItem(getPhotoStorageKey(email));
+        setPhotoUri(null);
+      }
+    } catch (e) {
+      console.log('Error cargando foto guardada:', e);
+      setPhotoUri(null);
+    }
+  };
+
   const loadPerfil = async () => {
     try {
       const { data } = await api.get('/usuarias/me');
@@ -79,9 +107,10 @@ export default function Profile({ navigation }) {
         tutorCorreo: tutorC,
       });
 
-      // sincroniza inputs del tutor
       setTutorNombre(tutorN);
       setTutorCorreo(tutorC);
+
+      await loadSavedPhoto(data.email);
     } catch (e) {
       console.log('Error cargando perfil:', e?.response?.data || e.message);
       Alert.alert('Error', 'No se pudo cargar tu perfil.');
@@ -92,7 +121,14 @@ export default function Profile({ navigation }) {
     loadPerfil();
   }, []);
 
-  // ======== Validaciones password (MOCK) ========
+  useFocusEffect(
+    useCallback(() => {
+      if (perfil.email) {
+        loadSavedPhoto(perfil.email);
+      }
+    }, [perfil.email])
+  );
+
   const isNewPwdLenOK = newPassword.length === 8;
   const isRepeatPwdLenOK = repeatPassword.length === 8;
   const isPwdMatch = newPassword === repeatPassword;
@@ -115,34 +151,29 @@ export default function Profile({ navigation }) {
     tutorNombre.trim().length > 0 &&
     validateEmail(tutorCorreo);
 
-  // ======== Guardar tutor (PATCH /usuarias/me) ========
- // ======== Guardar tutor (PATCH /usuarias/me) ========
-const handleSaveTutor = async () => {
-  if (!isTutorValid) {
-    Alert.alert('Revisa tus datos', 'El nombre del tutor no puede estar vacío y el correo debe ser válido.');
-    return;
-  }
+  const handleSaveTutor = async () => {
+    if (!isTutorValid) {
+      Alert.alert('Revisa tus datos', 'El nombre del tutor no puede estar vacío y el correo debe ser válido.');
+      return;
+    }
 
-  try {
-    await api.patch('/usuarias/me', {
-      tutor: {
-        nombre: tutorNombre.trim(),
-        correo: tutorCorreo.trim().toLowerCase(),
-      }
-    });
+    try {
+      await api.patch('/usuarias/me', {
+        tutor: {
+          nombre: tutorNombre.trim(),
+          correo: tutorCorreo.trim().toLowerCase(),
+        },
+      });
 
-    Alert.alert('Listo', 'Tutor guardado correctamente.');
-    setEditTutor(false);
-
-    // recarga perfil para reflejar datos reales
-    await loadPerfil();
-  } catch (e) {
-    const msg = e?.response?.data?.error || 'No se pudo guardar el tutor.';
-    Alert.alert('Error', msg);
-    console.log('Guardar tutor error:', e?.response?.data || e.message);
-  }
-};
-
+      Alert.alert('Listo', 'Tutor guardado correctamente.');
+      setEditTutor(false);
+      await loadPerfil();
+    } catch (e) {
+      const msg = e?.response?.data?.error || 'No se pudo guardar el tutor.';
+      Alert.alert('Error', msg);
+      console.log('Guardar tutor error:', e?.response?.data || e.message);
+    }
+  };
 
   const handleCancelTutor = () => {
     setEditTutor(false);
@@ -150,44 +181,40 @@ const handleSaveTutor = async () => {
     setTutorCorreo(perfil.tutorCorreo);
   };
 
-  // ======== Guardar contraseña (conectado a back) ========
- // ======== Guardar contraseña (conectado al backend) ========
-const handleSavePassword = async () => {
-  if (!isPasswordReady) {
-    let msg = 'Verifica tu contraseña:';
-    const issues = [];
-    if (!isNewPwdLenOK) issues.push('• La nueva contraseña debe tener 8 caracteres');
-    if (!isRepeatPwdLenOK) issues.push('• La confirmación debe tener 8 caracteres');
-    if (!isPwdMatch) issues.push('• La nueva y la confirmación no coinciden');
-    if (actualPasswordInput.length !== 8) issues.push('• La contraseña actual debe tener 8 caracteres');
-    if (issues.length) msg += '\n' + issues.join('\n');
-    Alert.alert('No se pudo guardar', msg);
-    return;
-  }
+  const handleSavePassword = async () => {
+    if (!isPasswordReady) {
+      let msg = 'Verifica tu contraseña:';
+      const issues = [];
+      if (!isNewPwdLenOK) issues.push('• La nueva contraseña debe tener 8 caracteres');
+      if (!isRepeatPwdLenOK) issues.push('• La confirmación debe tener 8 caracteres');
+      if (!isPwdMatch) issues.push('• La nueva y la confirmación no coinciden');
+      if (actualPasswordInput.length !== 8) issues.push('• La contraseña actual debe tener 8 caracteres');
+      if (issues.length) msg += '\n' + issues.join('\n');
+      Alert.alert('No se pudo guardar', msg);
+      return;
+    }
 
-  try {
-    // ✅ OJO: este endpoint debe existir en tu backend (cambio de contraseña autenticado)
-    await api.patch('/usuarias/change-password', {
-      currentPassword: actualPasswordInput,
-      newPassword: newPassword,
-    });
+    try {
+      await api.patch('/usuarias/change-password', {
+        currentPassword: actualPasswordInput,
+        newPassword: newPassword,
+      });
 
-    Alert.alert('Listo', 'Contraseña actualizada correctamente.');
+      Alert.alert('Listo', 'Contraseña actualizada correctamente.');
 
-    setChangePassword(false);
-    setActualPasswordInput('');
-    setNewPassword('');
-    setRepeatPassword('');
-    setShowActual(false);
-    setShowNew(false);
-    setShowRepeat(false);
-  } catch (e) {
-    const msg = e?.response?.data?.error || 'No se pudo actualizar la contraseña.';
-    Alert.alert('Error', msg);
-    console.log('Change password error:', e?.response?.data || e.message);
-  }
-};
-
+      setChangePassword(false);
+      setActualPasswordInput('');
+      setNewPassword('');
+      setRepeatPassword('');
+      setShowActual(false);
+      setShowNew(false);
+      setShowRepeat(false);
+    } catch (e) {
+      const msg = e?.response?.data?.error || 'No se pudo actualizar la contraseña.';
+      Alert.alert('Error', msg);
+      console.log('Change password error:', e?.response?.data || e.message);
+    }
+  };
 
   const handleCancelPwd = () => {
     setChangePassword(false);
@@ -199,22 +226,51 @@ const handleSavePassword = async () => {
     setShowRepeat(false);
   };
 
-  // ======== Foto local (solo UI) ========
   const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos para actualizar tu imagen.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets?.[0]?.uri) {
-      setPhotoUri(result.assets[0].uri);
-      Alert.alert('Listo', 'Tu foto se actualizó.');
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos para actualizar tu imagen.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        const pickedUri = result.assets[0].uri;
+
+        if (!perfil.email) {
+          Alert.alert('Error', 'No se pudo identificar a la usuaria.');
+          return;
+        }
+
+        const safeEmail = perfil.email.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const fileName = `profile_${safeEmail}.jpg`;
+        const persistentUri = FileSystem.documentDirectory + fileName;
+
+        const existingFile = await FileSystem.getInfoAsync(persistentUri);
+        if (existingFile.exists) {
+          await FileSystem.deleteAsync(persistentUri, { idempotent: true });
+        }
+
+        await FileSystem.copyAsync({
+          from: pickedUri,
+          to: persistentUri,
+        });
+
+        await AsyncStorage.setItem(getPhotoStorageKey(perfil.email), persistentUri);
+        setPhotoUri(persistentUri);
+
+        Alert.alert('Listo', 'Tu foto se actualizó.');
+      }
+    } catch (e) {
+      console.log('Error al seleccionar foto:', e);
+      Alert.alert('Error', 'No se pudo actualizar la foto.');
     }
   };
 
@@ -230,14 +286,13 @@ const handleSavePassword = async () => {
       </View>
 
       <KeyboardAwareScrollView
-       style={{ flex: 1, backgroundColor: COLORS.bg }}
-  contentContainerStyle={{ paddingBottom: hp('12%') }}
-  keyboardShouldPersistTaps="handled"
-  enableOnAndroid
-  extraScrollHeight={hp('6%')}
-  showsVerticalScrollIndicator={false}
+        style={{ flex: 1, backgroundColor: COLORS.bg }}
+        contentContainerStyle={{ paddingBottom: hp('12%') }}
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid
+        extraScrollHeight={hp('6%')}
+        showsVerticalScrollIndicator={false}
       >
-        {/* Avatar */}
         <View style={styles.avatarWrap}>
           <TouchableOpacity onPress={pickImage} activeOpacity={0.9} style={styles.avatarBtn}>
             <Image
@@ -252,7 +307,6 @@ const handleSavePassword = async () => {
           </TouchableOpacity>
         </View>
 
-        {/* Información del perfil */}
         <View style={styles.sectionWrap}>
           <Text style={styles.sectionTitle}>Información del perfil</Text>
 
@@ -273,7 +327,6 @@ const handleSavePassword = async () => {
                 </>
               ) : (
                 <View style={{ width: '100%', marginTop: hp('0.6%') }}>
-                  {/* Actual */}
                   <View style={styles.inputLineRow}>
                     <TextInput
                       placeholder="Contraseña actual"
@@ -284,12 +337,11 @@ const handleSavePassword = async () => {
                       onChangeText={setActualPasswordInput}
                       maxLength={8}
                     />
-                    <TouchableOpacity onPress={() => setShowActual(s => !s)}>
+                    <TouchableOpacity onPress={() => setShowActual((s) => !s)}>
                       <Text style={styles.toggleText}>{showActual ? 'Ocultar' : 'Mostrar'}</Text>
                     </TouchableOpacity>
                   </View>
 
-                  {/* Nueva */}
                   <View style={styles.inputLineRow}>
                     <TextInput
                       placeholder="Nueva contraseña (8 caracteres)"
@@ -300,12 +352,11 @@ const handleSavePassword = async () => {
                       onChangeText={setNewPassword}
                       maxLength={8}
                     />
-                    <TouchableOpacity onPress={() => setShowNew(s => !s)}>
+                    <TouchableOpacity onPress={() => setShowNew((s) => !s)}>
                       <Text style={styles.toggleText}>{showNew ? 'Ocultar' : 'Mostrar'}</Text>
                     </TouchableOpacity>
                   </View>
 
-                  {/* Repetir */}
                   <View style={[styles.inputLineRow, styles.lastNoDivider]}>
                     <TextInput
                       placeholder="Repite contraseña (8 caracteres)"
@@ -316,12 +367,11 @@ const handleSavePassword = async () => {
                       onChangeText={setRepeatPassword}
                       maxLength={8}
                     />
-                    <TouchableOpacity onPress={() => setShowRepeat(s => !s)}>
+                    <TouchableOpacity onPress={() => setShowRepeat((s) => !s)}>
                       <Text style={styles.toggleText}>{showRepeat ? 'Ocultar' : 'Mostrar'}</Text>
                     </TouchableOpacity>
                   </View>
 
-                  {/* Botones */}
                   <View style={styles.actionsRowEnd}>
                     <TouchableOpacity onPress={handleCancelPwd} style={styles.linkBtn}>
                       <Text style={styles.linkBtnText}>Cancelar</Text>
@@ -339,7 +389,6 @@ const handleSavePassword = async () => {
             </View>
           </View>
 
-          {/* Tutor */}
           <Text style={[styles.sectionTitle, { marginTop: hp('2.2%') }]}>Datos del tutor</Text>
           <View style={styles.card}>
             {!editTutor ? (
@@ -384,7 +433,7 @@ const handleSavePassword = async () => {
             )}
           </View>
         </View>
-</KeyboardAwareScrollView>
+      </KeyboardAwareScrollView>
 
       <FooterGeneral navigation={navigation} activeScreen="Perfil" />
     </SafeAreaView>
